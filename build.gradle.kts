@@ -1,4 +1,5 @@
 plugins {
+    id("application")
     id("java")
 }
 
@@ -7,16 +8,22 @@ version = "1.0-SNAPSHOT"
 
 repositories {
     mavenCentral()
+    maven { url = uri("https://jitpack.io") }
 }
 
 dependencies {
     testImplementation(platform("org.junit:junit-bom:6.0.0"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
-    implementation("com.github.FlowArg:OpenLauncherLib:VERSION")
-    implementation("com.github.FlowArg:FlowUpdater:VERSION")
+    implementation("fr.flowarg:openlauncherlib:3.2.11")
+    implementation("fr.flowarg:flowupdater:1.9.4")
+
 }
 
 tasks.test {
     useJUnitPlatform()
+}
+
+application {
+    mainClass.set("org.launcher.Main")
 }
