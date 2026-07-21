@@ -17,7 +17,7 @@ dependencies {
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     implementation("fr.flowarg:openlauncherlib:3.2.11")
     implementation("fr.flowarg:flowupdater:1.9.4")
-
+    implementation("fr.flowarg:flowupdater-curseforgeplugin:2.0.0")
 }
 
 tasks.test {
