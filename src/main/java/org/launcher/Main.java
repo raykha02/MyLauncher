@@ -3,6 +3,8 @@ package org.launcher;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -10,23 +12,29 @@ import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
+import java.util.function.Consumer;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.stream.Stream;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import fr.flowarg.flowupdater.download.json.CurseFileInfo;
-import fr.flowarg.flowupdater.download.json.Mod;
+
 import fr.flowarg.flowupdater.versions.VanillaVersion;
 import fr.flowarg.flowupdater.versions.fabric.FabricVersion;
 import fr.flowarg.flowupdater.versions.fabric.FabricVersionBuilder;
 import fr.flowarg.openlauncherlib.*;
-import fr.theshark34.openlauncherlib.LaunchException;
-import fr.theshark34.openlauncherlib.external.ClasspathConstructor;
+
 import fr.theshark34.openlauncherlib.external.ExternalLaunchProfile;
 import fr.theshark34.openlauncherlib.external.ExternalLauncher;
 import fr.theshark34.openlauncherlib.minecraft.*;
 import fr.flowarg.flowupdater.*;
-import fr.theshark34.openlauncherlib.util.explorer.Explorer;
+
+import net.raphimc.minecraftauth.MinecraftAuth;
+import net.raphimc.minecraftauth.java.JavaAuthManager;
+import net.raphimc.minecraftauth.msa.model.MsaDeviceCode;
+import net.raphimc.minecraftauth.msa.service.impl.DeviceCodeMsaAuthService;
 
 //TIP To <b>Run</b> code, press <shortcut actionId="Run"/> or
 // click the <icon src="AllIcons.Actions.Execute"/> icon in the gutter.
@@ -68,7 +76,7 @@ public class Main {
         );
 
         Path gameDir = infos.getGameDir();
-
+        AuthInfos authInfos = login(gameDir);
         // --- Téléchargement (FlowUpdater : vanilla + Fabric) ---
         VanillaVersion version = new VanillaVersion.VanillaVersionBuilder()
                 .withName("1.20.4")
@@ -119,13 +127,46 @@ public class Main {
 
         // Auth "offline" : suffisant pour juste tester que ça démarre.
         // Remplace par une vraie session MinecraftAuth (device code flow) si besoin.
-        AuthInfos authInfos = new AuthInfos("Player", "0", "00000000-0000-0000-0000-000000000000");
+        //AuthInfos authInfos = new AuthInfos("Player", "0", "00000000-0000-0000-0000-000000000000");
 
         ExternalLaunchProfile profile = MinecraftLauncher.createExternalProfile(infos, folder, authInfos);
         ExternalLauncher launcher = new ExternalLauncher(profile);
         launcher.launch();
     }
+    /**
+     * Connecte le joueur via le device code flow Microsoft, ou recharge
+     * une session sauvegardée si elle existe et est encore valide.
+     */
 
+    private static AuthInfos login(Path gameDir) throws Exception {
+        var httpClient = MinecraftAuth.createHttpClient("MyLauncher/1.0");
+        File tokenFile = new File(gameDir.toFile(), "tokens.json");
+        Files.createDirectories(gameDir);
+
+        JavaAuthManager authManager;
+
+        if (tokenFile.exists()) {
+            String json = Files.readString(tokenFile.toPath(), StandardCharsets.UTF_8);
+            JsonObject saved = JsonParser.parseString(json).getAsJsonObject();
+            authManager = JavaAuthManager.fromJson(httpClient, saved);
+        } else {
+            authManager = JavaAuthManager.create(httpClient)
+                    .login(DeviceCodeMsaAuthService::new, (Consumer<MsaDeviceCode>) deviceCode -> {
+                        System.out.println("Va sur : " + deviceCode.getVerificationUri());
+                        System.out.println("Entre le code : " + deviceCode.getUserCode());
+                        System.out.println("(ou directement : " + deviceCode.getDirectVerificationUri() + ")");
+                    });
+        }
+
+        String username = authManager.getMinecraftProfile().getUpToDate().getName();
+        String accessToken = authManager.getMinecraftToken().getUpToDate().getToken();
+        String uuid = authManager.getMinecraftProfile().getUpToDate().getId().toString();
+
+        Files.writeString(tokenFile.toPath(), JavaAuthManager.toJson(authManager).toString(), StandardCharsets.UTF_8);
+
+        System.out.println("Connecté en tant que : " + username);
+        return new AuthInfos(username, accessToken, uuid);
+    }
     private static void extractNatives(Path gameDir) throws IOException {
         Path librariesDir = gameDir.resolve("libraries");
         Path nativesDir = gameDir.resolve("natives");
